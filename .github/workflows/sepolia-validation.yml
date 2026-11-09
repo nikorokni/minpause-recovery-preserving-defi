@@ -1,0 +1,34 @@
+name: Sepolia validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: testnet
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: testnet/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - name: Deploy and validate on Sepolia
+        env:
+          SEPOLIA_RPC_URL: ${{ secrets.SEPOLIA_RPC_URL }}
+          SEPOLIA_DEPLOYER_KEY: ${{ secrets.SEPOLIA_DEPLOYER_KEY }}
+        run: npm run deploy:sepolia
+      - name: Upload on-chain evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: sepolia-validation-evidence
+          path: testnet/results/sepolia-latest.json
+          if-no-files-found: error

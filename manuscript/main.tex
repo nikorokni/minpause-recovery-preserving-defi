@@ -1,33 +1,21 @@
-\documentclass[10pt,twocolumn]{article}
-\usepackage[a4paper,margin=1.55cm,columnsep=0.55cm]{geometry}
-\usepackage[T1]{fontenc}
-\usepackage[utf8]{inputenc}
-\usepackage{lmodern}
-\usepackage{microtype}
+%!TEX TS-program = pdflatex
+\PassOptionsToPackage{a4paper,margin=1in}{geometry}
+\documentclass[sn-vancouver,Numbered]{sn-jnl}
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{booktabs}
 \usepackage{graphicx}
 \usepackage{xcolor}
-\usepackage{xurl}
-\usepackage{hyperref}
-\usepackage{enumitem}
-\usepackage[most]{tcolorbox}
-\usepackage{balance}
+\usepackage{url}
 
 \definecolor{minblue}{HTML}{124E78}
-\definecolor{minorange}{HTML}{F28C28}
-\definecolor{taskyellow}{HTML}{FFF4CC}
 \hypersetup{colorlinks=true,linkcolor=minblue,citecolor=minblue,urlcolor=minblue}
-\setlength{\parindent}{1em}
-\setlength{\parskip}{0.2em}
-\setlist{nosep,leftmargin=*}
 \newtheorem{definition}{Definition}
-\newtheorem{proposition}{Proposition}
+\newtheorem{theorem}{Theorem}
 \newtheorem{lemma}{Lemma}
 
 \IfFileExists{generated_macros.tex}{\input{generated_macros.tex}}{
   \newcommand{\ScenarioCount}{360}
-  \newcommand{\ExperimentRuns}{1,800}
+  \newcommand{\ExperimentRuns}{2,160}
   \newcommand{\MinAttackPrevention}{100.0\%}
   \newcommand{\MinBlockedVolume}{14.4\%}
   \newcommand{\MinAvailability}{85.6\%}
@@ -37,24 +25,26 @@
   \newcommand{\ManualAttackPrevention}{91.7\%}
   \newcommand{\MinPolicySize}{1.34}
   \newcommand{\AvailabilityGain}{85.6\%}
+  \newcommand{\OmittedPathCoverage}{94.3\%}
+  \newcommand{\OmittedPathLoss}{2.57}
 }
-
-\newtcolorbox{mehrantask}[1]{
-  colback=taskyellow,colframe=minorange,fonttitle=\bfseries,
-  title={Mathematical completion required: #1},breakable
-}
-
-\title{\textbf{MinPause: Recovery-Preserving Emergency Control for DeFi Lending}}
-\author{Niko Rokni\\\small Draft for mathematical completion and conference submission}
-\date{November 2026}
 
 \begin{document}
-\raggedbottom
-\maketitle
+\title[MinPause for DeFi Lending]{MinPause: Recovery-Preserving Emergency Control for DeFi Lending}
 
-\begin{abstract}
-Emergency pauses can stop non-atomic decentralized-finance attacks, but a global freeze also blocks legitimate activity and may prevent borrowers from repaying debt or adding collateral.  We formulate emergency response as a constrained, weighted hitting-set problem: select the least-cost set of protocol operations whose suspension intersects every identified attack path while designated recovery operations remain available.  We implement \emph{MinPause}, an exact and auditable policy synthesizer for the small operation sets exposed by lending markets, and evaluate it against no intervention, a global freeze, a coarse risk pause, and a manual selective policy.  A deterministic Latin-hypercube design covers \ScenarioCount{} market and incident configurations, producing \ExperimentRuns{} policy evaluations.  MinPause blocks \MinAttackPrevention{} of modelled attack paths while retaining \MinAvailability{} of legitimate activity and keeping repayment and collateral top-up available.  The mean policy contains only \MinPolicySize{} paused operations, compared with nine under a global freeze.  The artifact includes source code, tests, scenario-level results, and manuscript-generation scripts.  Formal security, feasibility, recovery, and complexity claims are stated precisely but their final proofs are isolated and explicitly assigned for mathematical completion before submission.
-\end{abstract}
+\author*[1]{\fnm{Niko} \sur{Rokni Lamouki}}
+\email{nrokni@uel.ac.uk}
+
+\affil*[1]{\orgdiv{School of Architecture, Computing and Engineering},
+\orgname{University of East London},
+\orgaddress{\street{Docklands Campus}, \city{London}, \postcode{E16 2RD},
+\country{United Kingdom}}}
+
+\abstract{Emergency pauses can stop non-atomic decentralized-finance attacks, but a global freeze also blocks legitimate activity and may prevent borrowers from repaying debt or adding collateral. We formulate emergency response as a constrained, weighted hitting-set problem: select the least-cost set of protocol operations whose suspension intersects every identified attack path while designated recovery operations remain available. We implement \emph{MinPause}, an exact and auditable policy synthesizer, and evaluate it over \ScenarioCount{} deterministic Latin-hypercube scenarios and \ExperimentRuns{} policy--scenario evaluations. MinPause blocks \MinAttackPrevention{} of supplied attack paths while retaining \MinAvailability{} of legitimate activity; omitting one input path reduces coverage to \OmittedPathCoverage{}, quantifying model-risk sensitivity. We prove path coverage under an explicit labelled-transition-system assumption, characterize feasibility, derive necessary and sufficient borrower-resource conditions for recovery, and prove NP-completeness of the decision problem. A controlled Solidity harness further verifies locally that pausing only an Euler-inspired \texttt{donateToReserves} selector blocks the hazardous transition while \texttt{repay} and \texttt{addCollateral} remain callable; the repository includes a Sepolia deployment workflow whose public-chain evidence is reported only after signed execution.}
+
+\keywords{Decentralized finance, emergency pause, circuit breaker, hitting set, borrower recovery, smart-contract security, Sepolia}
+
+\maketitle
 
 \section{Introduction}
 Decentralized lending protocols operate continuously, settle transactions quickly, and expose composable entry points to untrusted callers.  When an incident is detected, a guardian can often pause a protocol faster than a governance upgrade can be proposed, audited, and executed.  This response can be effective when an attack is non-atomic: Zhou et al. found that 56\% of the attacks in their incident corpus left a potential rescue interval \cite{zhou2023sok}.  Yet pausing is not free.  A global freeze exchanges integrity for availability and can prevent users from reducing their own exposure.  In a lending market, blocking \texttt{repay} or collateral top-up during a price shock may turn a containable incident into avoidable liquidation or bad debt.
@@ -68,13 +58,13 @@ The contributions are:
   \item a protocol-independent action--effect representation of lending operations, state effects, and alternative attack paths;
   \item the Minimum Recovery-Preserving Pause problem, combining path coverage, legitimate-use cost, and group-level disruption;
   \item an exact, deterministic solver and a public experimental artifact with \ScenarioCount{} reproducible scenarios;
-  \item a counterfactual comparison of four conventional responses with MinPause using security, availability, recovery, bad-debt, and distributional metrics; and
-  \item four explicit theoretical claims, separated into a mathematical completion section so that assumptions and proofs can be independently checked before submission.
+  \item a counterfactual comparison of four conventional responses with MinPause, including a missing-path sensitivity experiment and an Euler-inspired Solidity validation harness; and
+  \item formal guarantees for represented-path coverage, feasibility, borrower recovery resources, and computational complexity.
 \end{itemize}
 
 \section{Related Work}
 \subsection{DeFi incidents and response}
-The DeFi security literature has catalogued smart-contract, economic, oracle, governance, and composability failures.  The SoK by Zhou et al. combines 181 incidents with academic and audit evidence, studies rescue intervals, and measures the use and timing of emergency pauses \cite{zhou2023sok}.  Daian et al. show how transaction ordering and miner-extractable value create adversarial execution environments \cite{daian2020flash}.  Qin et al. empirically document liquidation design and borrower costs across major lending protocols \cite{qin2021liquidations}.  These studies motivate rapid containment, but do not synthesize the scope of the containment action.
+The DeFi security literature has catalogued smart-contract, economic, oracle, governance, and composability failures. The SoK by Zhou et al. combines 181 incidents with academic and audit evidence, studies rescue intervals, and measures the use and timing of emergency pauses \cite{zhou2023sok}. Daian et al. show how transaction ordering and miner-extractable value create adversarial execution environments \cite{daian2020flash}; Qin et al. analyze how flash-loan atomicity amplifies attack strategies \cite{qin2021flashloans}. Separate empirical work documents liquidation design and borrower costs across major lending protocols \cite{qin2021liquidations}. These studies motivate rapid containment, but do not synthesize the scope of the containment action.
 
 Emergency intervention also has economic effects.  During the Ethereum Merge, Aave paused ETH borrowing while Compound altered interest parameters and borrowing caps.  Heimbach et al. show that these interventions affected liquidity and redistributed hard-fork-arbitrage value \cite{heimbach2023merge}.  More generally, rigid lending terms can amplify fragility and multiple-equilibrium behaviour \cite{chiu2025fragility}.  MinPause focuses on the narrower operational question that precedes such welfare analysis: which actions must be disabled after an alert?
 
@@ -105,9 +95,9 @@ H_i(t)=\frac{\ell_i C_i(t)}{D_i(t)}.
 A position is at risk when $H_i<1$.
 
 \subsection{Attack paths and responder}
-An attack path $P_k\subseteq F$ is the set of operations required by one executable route to a prohibited economic effect.  Multiple paths may reach the same effect.  The detector supplies a family $\mathcal P=\{P_1,\ldots,P_m\}$; path extraction itself is outside the present scope.  The responder controls operation-level pause flags but cannot reverse settled transactions, change historical oracle observations, or stop calls that finish atomically before detection.
+An attack path $P_k\subseteq F$ is the operation support of one executable route to a prohibited economic effect. Multiple paths may reach the same effect. The detector supplies a family $\mathcal P=\{P_1,\ldots,P_m\}$; path extraction is deliberately outside the decision engine. In deployment, MinPause consumes alerts and traces from monitoring or transaction-analysis systems such as Forta or Phalcon and returns a candidate cut set \cite{forta2026kit,blocksec2026phalcon}. The separation is important: the optimizer guarantees coverage only relative to the paths supplied to it, not discovery of an unknown exploit.
 
-We assume the guardian is not compromised, pause transactions are eventually included, and the abstract paths are sound for the incident under study.  These are strong assumptions and are tested only through sensitivity analysis, not formally guaranteed by the implementation.
+The responder controls operation-level pause flags but cannot reverse settled transactions, change historical oracle observations, or stop calls that finish atomically before detection. We assume the guardian is uncompromised, pause transactions are eventually included, and every represented path contains at least one independently pausable non-recovery operation. Because these assumptions can fail, the initial operating mode is shadow recommendation with human guardian confirmation. Section~\ref{sec:sensitivity} quantifies the effect of deliberately omitting one path.
 
 \section{MinPause Framework}
 \subsection{Decision variables and constraints}
@@ -146,6 +136,9 @@ Because a market normally exposes only a small number of independent pause flags
 
 The output contains the paused set, feasibility flag, legitimate-use cost, disparity, and objective value.  An infeasible result is operationally meaningful: the identified threat cannot be contained under the declared recovery guarantee, so the responder must relax the guarantee, upgrade, migrate, or use a broader emergency procedure.
 
+\subsection{Scalability extension}
+Enumeration is intentional for one market: nine operations and two protected recovery operations yield only $2^7=128$ candidates, making the result deterministic and directly auditable. For composable systems with $|F|>30$, Eq.~\eqref{eq:objective} is a 0--1 mixed-integer linear program. Introduce $u\geq B_g(x)$ and $v\leq B_g(x)$ for every group $g$, then minimize $\sum_f c_fx_f+\lambda(u-v)$ subject to Eqs.~\eqref{eq:cover}--\eqref{eq:recovery}. Standard branch-and-bound solvers such as CBC or Gurobi can then replace enumeration. Runtime depends on path structure and must be benchmarked for the target ecosystem; we do not claim a universal sub-second bound.
+
 \begin{figure}[t]
   \centering
   \includegraphics[width=\columnwidth]{../figures/policy_comparison.pdf}
@@ -153,58 +146,81 @@ The output contains the paused set, feasibility flag, legitimate-use cost, dispa
   \label{fig:comparison}
 \end{figure}
 
-\section{Mathematical Analysis: Completion Required}
-This section contains the only unresolved material in the manuscript.  The computational method and empirical results do not assume that the following proofs have already been established.  Each statement must be checked, corrected if necessary, and proved before submission.
+\section{Formal Analysis}
+\begin{definition}[Labelled protocol semantics]
+A protocol is a labelled transition system $\mathcal T=(S,F,\rightarrow)$, where $S$ is the state space and $s\xrightarrow{f}s'$ denotes a transition caused by operation $f\in F$. A trace is an ordered sequence $\sigma=\langle f_1,\ldots,f_q\rangle$ for which states $s_0,\ldots,s_q$ exist with $s_{j-1}\xrightarrow{f_j}s_j$. Its support is $\operatorname{supp}(\sigma)=\{f_j:1\leq j\leq q\}$. For a pause set $X\subseteq F$, $\mathcal T_X$ removes all transitions labelled by elements of $X$.
+\end{definition}
 
-\begin{mehrantask}{M1---Attack-path coverage}
-\textbf{Information supplied.}  Let the protocol abstraction be a directed state-transition system.  Each prohibited execution trace is mapped to an operation set $P_k$.  A pause policy removes every transition labelled by an operation in $X=\{f:x_f=1\}$.
+The catalogue is \emph{complete for represented harm} if every harmful trace in its stated incident class is represented by a path $P_k=\operatorname{supp}(\sigma_k)$. We additionally assume hard dependency: every step of $\sigma_k$ is necessary for that represented execution. In one atomic transaction, failure of a required call reverts the transaction; across transactions, failure of a required predecessor prevents a later causal precondition. This assumption excludes optional calls from $P_k$ and makes explicit where the unordered set abstraction is sound.
 
-\textbf{Proposed statement.}  If $X\cap P_k\neq\varnothing$ for every $P_k\in\mathcal P$, then no trace represented by $\mathcal P$ remains executable in the paused transition system.
+\begin{theorem}[M1: represented-path coverage]
+If $X\cap P_k\neq\varnothing$ for every $P_k\in\mathcal P$, no catalogued trace $\sigma_k$ is executable in $\mathcal T_X$. Under catalogue completeness, no harmful trace in the represented incident class is executable.
+\end{theorem}
+\begin{proof}
+Fix $k$ and choose $f\in X\cap P_k$. Because $P_k=\operatorname{supp}(\sigma_k)$, the ordered trace contains a transition labelled $f$. That transition is absent from $\mathcal T_X$, so the complete hard-dependent trace cannot execute. The argument holds for every $k$. Catalogue completeness extends the conclusion from listed traces to the stated incident class. It does not cover a trace omitted by the detector.
+\end{proof}
 
-\textbf{To complete.}  Define precisely the mapping from ordered traces to operation sets; state the soundness assumption needed to avoid loss of order/multiplicity information; provide a short proof, or replace the set abstraction with an ordered-path formulation if the statement is not valid as written.
-\end{mehrantask}
-
-\begin{mehrantask}{M2---Feasibility characterization}
-\textbf{Candidate condition.}
+\begin{theorem}[M2: feasibility]
+Assume every $f\in F\setminus R$ is independently pausable and there are no constraints beyond Eqs.~\eqref{eq:cover}--\eqref{eq:recovery}. MinPause is feasible if and only if
 \begin{equation}
 \forall P_k\in\mathcal P,\qquad P_k\setminus R\neq\varnothing.
 \label{eq:feasible-condition}
 \end{equation}
-\textbf{Proposed statement.}  With no additional restrictions on pausing operations in $F\setminus R$, problem \eqref{eq:objective} is feasible if and only if \eqref{eq:feasible-condition} holds.
+\end{theorem}
+\begin{proof}
+($\Rightarrow$) Suppose a feasible vector exists but some $P_k\subseteq R$. Equation~\eqref{eq:recovery} gives $x_f=0$ for every $f\in P_k$, hence $\sum_{f\in P_k}x_f=0$, contradicting Eq.~\eqref{eq:cover}. ($\Leftarrow$) If Eq.~\eqref{eq:feasible-condition} holds, set $x_f=1$ for all $f\in F\setminus R$ and $x_r=0$ for $r\in R$. Every path contains a member of $F\setminus R$, so every coverage constraint is satisfied. Empty paths are therefore correctly classified as infeasible.
+\end{proof}
 
-\textbf{To complete.}  Verify both directions, state whether empty paths or unavailable pause flags require exclusions, and supply a formal proof.
-\end{mehrantask}
-
-\begin{mehrantask}{M3---Finite borrower recovery}
-From \eqref{eq:hf}, repayment $a_D$ and additional collateral $a_C$ give
+\begin{theorem}[M3: resource-bounded recovery]
+Fix $C_i\geq0$, $D_i>0$, and $0<\ell_i\leq1$. Let $0\leq a_D\leq A_i^D<D_i$ and $0\leq a_C\leq A_i^C$. A pair of admissible actions can restore $H_i'\geq1$ if and only if
+\begin{equation}
+\ell_i(C_i+A_i^C)\geq D_i-A_i^D.
+\label{eq:resource-condition}
+\end{equation}
+When Eq.~\eqref{eq:resource-condition} holds, recovery is reachable in one aggregated repayment/top-up action under fixed prices and atomic execution of the selected calls.
+\end{theorem}
+\begin{proof}
+For $a_D<D_i$,
 \[
-H_i'=\frac{\ell_i(C_i+a_C)}{D_i-a_D},
-\quad 0\leq a_D<D_i,\quad a_C\geq0.
+H_i'=\frac{\ell_i(C_i+a_C)}{D_i-a_D}\geq1
+\quad\Longleftrightarrow\quad
+\ell_i(C_i+a_C)\geq D_i-a_D.
 \]
-Both actions are monotone in the expected direction when prices and $\ell_i$ are fixed.
+The left side increases with $a_C$ and the right side decreases with $a_D$. More explicitly,
+\[
+\frac{\partial H_i'}{\partial a_C}=\frac{\ell_i}{D_i-a_D}>0,
+\qquad
+\frac{\partial H_i'}{\partial a_D}=
+\frac{\ell_i(C_i+a_C)}{(D_i-a_D)^2}\geq0.
+\]
+Therefore the maximum attainable health factor uses $(a_D,a_C)=(A_i^D,A_i^C)$, proving necessity and sufficiency of Eq.~\eqref{eq:resource-condition}. Executing that feasible pair reaches the target in one aggregated step. If full repayment $A_i^D\geq D_i$ is permitted, choosing $a_D=D_i$ eliminates debt and is a separate trivially safe boundary case rather than a division by zero.
+\end{proof}
 
-\textbf{To complete.}  State necessary and sufficient resource conditions for the existence of admissible $(a_D,a_C)$ such that $H_i'\geq1$; prove monotonicity and finite reachability under explicit assumptions; distinguish ``the recovery operation is callable'' from ``the borrower has sufficient resources to recover.''  The empirical metric uses the latter distinction and never assumes universal recovery.
-\end{mehrantask}
+MinPause guarantees only that \textsf{repay} and \textsf{addCollateral} remain callable. Theorem M3 shows why this is not universal economic recovery: a user who fails Eq.~\eqref{eq:resource-condition} lacks sufficient resources despite callable functions. With per-transaction caps, finite reachability additionally requires positive caps and stable valuations; batching the feasible totals then takes finitely many calls.
 
-\begin{mehrantask}{M4---Computational complexity}
-\textbf{Proposed statement.}  The decision form of MinPause with $R=\varnothing$ and $\lambda=0$ is NP-complete; the optimization form is NP-hard by reduction from weighted hitting set.
+\begin{theorem}[M4: computational complexity]
+The decision version of MinPause with $R=\varnothing$ and $\lambda=0$ is NP-complete. Consequently, the optimization problem is NP-hard.
+\end{theorem}
+\begin{proof}
+Define the decision problem: given $F$, path family $\mathcal P$, non-negative integer costs $c_f$, and budget $K$, determine whether some $X\subseteq F$ satisfies $X\cap P_k\neq\varnothing$ for all $k$ and $\sum_{f\in X}c_f\leq K$. A proposed binary vector is verified by summing its cost and checking all incidences in time polynomial in $|F|+\sum_k|P_k|$, so the problem is in NP.
 
-\textbf{To complete.}  Give a clean polynomial reduction, define the decision threshold, establish membership in NP, and explain that the deployed exact solver remains practical because $|F|$ is small.  Do not claim polynomial-time optimality for arbitrary protocol size.
-\end{mehrantask}
+For NP-hardness, take an arbitrary Minimum Weight Hitting Set decision instance with universe $U$, family $\mathcal S$, weights $w_u$, and budget $K$. Construct a MinPause instance with $F=U$, $\mathcal P=\mathcal S$, $c_f=w_f$, $R=\varnothing$, and $\lambda=0$. The construction is linear in the input representation. A subset $X$ hits every member of $\mathcal S$ with weight at most $K$ if and only if the identical subset is a feasible pause set with objective at most $K$. Thus the decision problems are equivalent, proving NP-hardness and, with membership in NP, NP-completeness. An exact optimizer for the general problem would solve the decision problem, so optimization is NP-hard.
+\end{proof}
 
 \section{Experimental Methodology}
 \subsection{Design and reproducibility}
-We generate \ScenarioCount{} configurations using a seeded, jittered Latin hypercube.  The sampled dimensions are collateral price shock $[0.02,0.45]$, utilization $[0.35,0.98]$, detection delay $[1,90]$ minutes, potential attack loss $[0.25,20]$ million USD on a logarithmic scale, liquidity $[1,100]$ million USD on a logarithmic scale, borrower count $[120,600]$, recovery capacity $[0.04,0.50]$, activity skew, and incident family.  Four incident families---oracle, liquidity, accounting, and composite---contain three to five alternative attack paths.
+We generate \ScenarioCount{} configurations using a seeded, jittered Latin hypercube \cite{mckay1979lhs}. The sampled dimensions are collateral price shock $[0.02,0.45]$, utilization $[0.35,0.98]$, detection delay $[1,90]$ minutes, potential attack loss $[0.25,20]$ million USD on a logarithmic scale, liquidity $[1,100]$ million USD on a logarithmic scale, borrower count $[120,600]$, recovery capacity $[0.04,0.50]$, activity skew, and incident family. Four incident families---oracle, liquidity, accounting, and composite---contain three to five alternative attack paths.
 
 Borrower debt is lognormally distributed, initial health factors lie in $[1.03,1.85]$, and liquidation thresholds lie in $[0.72,0.86]$.  A price shock is applied before policy evaluation.  Available repayment and collateral top-up are sampled as bounded shares of each position.  These synthetic distributions create controlled counterfactuals; they are not estimates of a named production market.
 
-Every scenario is evaluated under five policies:
+Every scenario is evaluated under six policies:
 \begin{enumerate}
   \item \textbf{No intervention}: all operations remain active;
   \item \textbf{Global freeze}: all nine operations are disabled;
   \item \textbf{Coarse risk pause}: withdraw, borrow, liquidate, flash loan, and swap are disabled;
   \item \textbf{Manual selective}: borrow, flash loan, and oracle update are disabled; and
-  \item \textbf{MinPause}: the solution of \eqref{eq:objective}.
+  \item \textbf{MinPause}: the solution of \eqref{eq:objective}; and
+  \item \textbf{MinPause--one path omitted}: MinPause synthesized after removing the final deterministic catalogue path, then evaluated against the complete path family.
 \end{enumerate}
 The complete design yields \ExperimentRuns{} policy--scenario evaluations.  The repository stores scenario-level CSV output, aggregate summaries, figures, fixed seeds, and automated tests.
 
@@ -216,6 +232,7 @@ Attack prevention is the fraction of identified paths intersected by the pause s
 \centering
 \caption{Mean results across \ScenarioCount{} scenarios. Higher is better for attack prevention, availability, and recovery; lower is better for policy size and disparity.}
 \label{tab:main-results}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{lrrrrr}
 \toprule
 Policy & Attack prevention & Availability & Recovery coverage & Policy size & Disparity \\
@@ -225,8 +242,10 @@ Global freeze & 100.0\% & 0.0\% & 2.5\% & 9.00 & 0.000 \\
 Coarse risk pause & 100.0\% & 38.0\% & 81.2\% & 5.00 & 0.334 \\
 Manual selective & 91.7\% & 74.0\% & 81.2\% & 3.00 & 0.058 \\
 \textbf{MinPause} & \textbf{100.0\%} & \textbf{85.6\%} & \textbf{81.2\%} & \textbf{1.34} & \textbf{0.042} \\
+MinPause--one path omitted & 94.3\% & 85.7\% & 81.2\% & 1.29 & 0.033 \\
 \bottomrule
 \end{tabular}
+}
 \end{table*}
 
 \subsection{Security and availability}
@@ -249,6 +268,12 @@ The coarse risk pause produces the largest mean burden disparity (0.334), reflec
 \subsection{Robustness over the sampled space}
 MinPause maintains full path coverage in every feasible generated scenario; variation in prevented loss is driven by the potential loss and detection delay rather than by missed paths.  Figure~\ref{fig:robustness} visualizes this distinction.  Long delays leave less loss preventable even when the selected policy is logically sufficient.  Emergency policy synthesis therefore complements, rather than replaces, low-latency monitoring and transaction inclusion.
 
+\subsection{Missing-path sensitivity}\label{sec:sensitivity}
+Deleting one path before synthesis while retaining the full family for evaluation reduces mean attack-path coverage from 100.0\% to \OmittedPathCoverage{}. Mean realized attack loss rises from USD 2.44 million to USD \OmittedPathLoss{} million, even though the incomplete model reports a slightly smaller policy (1.29 rather than 1.34 operations). This is the expected failure mode of a decision engine: optimization cannot compensate for missing threat information. The result motivates shadow-mode deployment, conservative path unions from multiple detectors, and guardian review of the selected cut before automation.
+
+\subsection{Controlled Solidity validation}
+We implement an Euler-inspired test fixture in Solidity rather than claiming a replay of Euler's production state. Euler's own incident account and a transaction-level debugger identify a missing health/liquidity check in \texttt{donateToReserves} as the enabling condition \cite{euler2024war,blocksec2026debugger}. The fixture deliberately reproduces that control-surface omission. In the unprotected run, donating 800 of 1,000 collateral units after borrowing 700 moves the health factor from 1.143 to 0.229. In the protected run, the guardian pauses only the \texttt{donateToReserves(uint256)} selector; the hazardous call reverts, while a 100-unit repayment and 100-unit collateral top-up remain callable and raise the health factor to 1.467. Both assertions pass in the deterministic Hardhat suite. A GitHub Actions workflow deploys the same controlled fixture to Sepolia and records addresses, transaction hashes, blocks, selectors, and assertions. Because no signing key is embedded in the artifact, public-chain execution is reported only after the workflow produces a verifiable evidence file. This test establishes enforcement and deployability, not historical Euler loss prevention.
+
 \section{Discussion}
 \subsection{Design implications}
 The experiments support three implementation recommendations.  First, protocols should expose distinct pause domains rather than one undifferentiated global flag.  Second, repayment and collateral top-up should be explicitly tested in the paused state; calling them ``allowed'' in documentation is insufficient if a shared internal transfer guard makes them revert.  Third, the action--effect model and candidate policies should be prepared and rehearsed before an incident.  Constructing the model while funds are leaving defeats the latency advantage of a circuit breaker.
@@ -256,29 +281,17 @@ The experiments support three implementation recommendations.  First, protocols 
 MinPause should initially operate in shadow mode.  Given an alert, it can emit a recommended policy and explanation while the guardian retains control.  Historical replay and fork tests should compare the recommendation with known incidents.  Automated execution is only defensible after path-extraction error, false alerts, role compromise, and integration failures are measured.
 
 \subsection{Limitations}
-The study is simulation-based and does not claim production deployment or mainnet validation.  Attack paths are supplied rather than automatically discovered.  The reduced-form loss curve, synthetic borrower distribution, and normalized pause costs are controlled experimental assumptions.  Composability can move harm outside the modelled protocol, and a pause transaction can be censored, front-run, or arrive after an atomic exploit.  The solver protects only declared recovery actions and does not prove that external tokens, bridges, or oracles needed by those actions remain live.  Finally, the formal statements in Section~5 require independent completion before the manuscript can claim theoretical guarantees.
+The economic evaluation is simulation-based and does not claim production deployment or mainnet-fork validation. The Solidity experiment uses a controlled Euler-inspired fixture on a mock asset; a Sepolia run proves public-testnet execution only after signed transaction evidence is archived. Attack paths are supplied rather than automatically discovered. The reduced-form loss curve, synthetic borrower distribution, and normalized pause costs are controlled assumptions. Composability can move harm outside the modelled protocol, and a pause transaction can be censored, front-run, or arrive after an atomic exploit. The solver protects only declared recovery actions and does not prove that external tokens, bridges, or oracles required by those actions remain live. Theorems M1--M3 are conditional on catalogue completeness, independent pause flags, fixed valuations, and user resource bounds; they do not remove these modelling assumptions.
 
 \section{Conclusion}
-MinPause reframes emergency control as a constrained selection problem rather than an all-or-nothing switch.  Across \ScenarioCount{} reproducible scenarios, it covers all supplied attack paths while preserving \MinAvailability{} of legitimate activity and keeping borrower recovery operations callable.  The result establishes a practical empirical baseline and a transparent artifact.  The next mandatory step is completion and verification of the four formal claims; subsequent work should extract paths from Solidity traces and validate recommendations on historical mainnet forks.
+MinPause reframes emergency control as a constrained selection problem rather than an all-or-nothing switch. Across \ScenarioCount{} reproducible scenarios, it covers all supplied attack paths while preserving \MinAvailability{} of legitimate activity and keeping borrower recovery operations callable. The formal analysis states exactly what follows from path coverage and what remains dependent on detector completeness and borrower liquidity. The controlled Solidity test demonstrates function-level enforcement without conflating it with historical validation. The next empirical step is a pinned Euler mainnet-fork replay and comparison of paths produced independently by multiple monitoring systems.
 
-\appendix
-\section{Handoff Checklist for Mehran}
-The following items are the complete mathematical handoff.  No code changes or empirical reruns are required unless a proof reveals that the model must change.
-\begin{enumerate}
-  \item Read the definitions in Sections 3 and 4 and normalize notation.
-  \item Complete M1, explicitly addressing whether operation sets safely abstract ordered traces.
-  \item Prove or correct the iff condition in M2.
-  \item Derive exact recovery resource conditions and a finite-reachability statement for M3.
-  \item Provide the NP-completeness/NP-hardness reduction requested in M4.
-  \item Mark every added assumption and verify that it is respected by the simulation.
-  \item Replace each orange box with theorem/proof text only after the claim has been checked.
-\end{enumerate}
-
-\section{Artifact Map}
+\section*{Reproducibility statement}
 The optimizer is in \texttt{src/minpause/optimizer.py}; scenario generation is in \texttt{src/minpause/scenarios.py}; policy evaluation is in \texttt{src/minpause/simulation.py}; the full run is reproduced by \texttt{scripts/run\_experiments.py}; and tests are in \texttt{tests/}.  Generated CSV files are stored under \texttt{results/} and figures under \texttt{figures/}.
 
-\balance
-\bibliographystyle{plain}
+\section*{Declarations}
+\textbf{Funding.} No external funding was received for this study. \textbf{Competing interests.} The author declares no competing interests. \textbf{Data and code availability.} Source code, generated scenarios, aggregate results, figures, Solidity fixtures, and deployment workflows are provided in the accompanying public repository.
+
 \bibliography{references}
 \end{document}
 

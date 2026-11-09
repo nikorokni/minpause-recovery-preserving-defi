@@ -19,12 +19,19 @@ def baseline_policies(scenario: Scenario) -> tuple[PausePolicy, ...]:
         return PausePolicy(name, frozenset(paused), True, 0.0, sum(costs[p] for p in paused), 0.0)
 
     minpause = synthesize_policy(scenario.operations, scenario.attack_paths)
+    incomplete_paths = scenario.attack_paths[:-1]
+    omitted_path = synthesize_policy(
+        scenario.operations,
+        incomplete_paths,
+        policy_name="MinPause - one path omitted",
+    )
     return (
         make("No intervention", set()),
         make("Global freeze", names),
         make("Coarse risk pause", {"withdraw", "borrow", "liquidate", "flash_loan", "swap"}),
         make("Manual selective", {"borrow", "flash_loan", "oracle_update"}),
         minpause,
+        omitted_path,
     )
 
 

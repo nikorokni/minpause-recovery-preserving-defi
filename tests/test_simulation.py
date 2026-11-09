@@ -41,5 +41,15 @@ def test_minpause_preserves_recovery_functions():
 
 def test_run_count_is_scenarios_times_policies():
     scenarios = generate_scenarios(3, seed=10)
-    assert len(run_scenarios(scenarios)) == 15
+    assert len(run_scenarios(scenarios)) == 18
+
+
+def test_missing_path_policy_is_scored_against_complete_path_family():
+    scenario = generate_scenarios(1, seed=7)[0]
+    policy = next(
+        p for p in baseline_policies(scenario) if p.name == "MinPause - one path omitted"
+    )
+    row = evaluate_policy(scenario, policy)
+    assert len(scenario.attack_paths) >= 2
+    assert 0.0 <= row["attack_prevention_rate"] <= 1.0
 

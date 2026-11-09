@@ -7,7 +7,8 @@
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10+">
   <a href="manuscript/main.pdf"><img src="https://img.shields.io/badge/Paper-PDF-B31B1B?logo=adobeacrobatreader&logoColor=white" alt="Paper PDF"></a>
   <img src="https://img.shields.io/badge/Evaluation-Shadow%20Mode-0B7285" alt="Shadow-mode evaluation">
-  <img src="https://img.shields.io/badge/Tests-15%20passing-2F9E44" alt="15 passing tests">
+  <img src="https://img.shields.io/badge/Python%20tests-16%20passing-2F9E44" alt="16 passing Python tests">
+  <img src="https://img.shields.io/badge/Solidity%20tests-2%20passing-2F9E44" alt="2 passing Solidity tests">
 </p>
 
 <p align="center">
@@ -17,7 +18,8 @@
 
 <p align="center">
   <a href="manuscript/main.pdf"><strong>Read the paper</strong></a> ·
-  <a href="docs/MEHRAN_MATH_HANDOFF.md"><strong>Mathematical handoff</strong></a> ·
+  <a href="docs/MEHRAN_MATH_HANDOFF.md"><strong>Independent proof brief</strong></a> ·
+  <a href="testnet/"><strong>Sepolia validation</strong></a> ·
   <a href="results/scenario_results.csv"><strong>Scenario results</strong></a> ·
   <a href="#reproduce-the-study"><strong>Reproduce</strong></a>
 </p>
@@ -52,7 +54,7 @@ The detector and attack-path extractor are outside the current scope. MinPause b
 
 ## Main results
 
-The deterministic experiment uses **360 Latin-hypercube scenarios** and evaluates five policies per scenario, producing **1,800 policy-scenario runs**.
+The deterministic experiment uses **360 Latin-hypercube scenarios** and evaluates six policies per scenario, producing **2,160 policy-scenario runs**. The sixth policy deliberately omits one input path to measure model-risk sensitivity.
 
 | Policy | Attack prevention | Legitimate availability | Recovery coverage | Mean policy size |
 |---|---:|---:|---:|---:|
@@ -61,6 +63,7 @@ The deterministic experiment uses **360 Latin-hypercube scenarios** and evaluate
 | Coarse risk pause | 100.0% | 38.0% | 81.2% | 5.00 |
 | Manual selective | 91.7% | 74.0% | 81.2% | 3.00 |
 | **MinPause** | **100.0%** | **85.6%** | **81.2%** | **1.34** |
+| MinPause — one path omitted | 94.3% | 85.7% | 81.2% | 1.29 |
 
 <p align="center">
   <img src="figures/policy_comparison.png" alt="Comparison of attack prevention, legitimate availability, and recovery coverage" width="82%">
@@ -99,7 +102,18 @@ $$
 \min_x\left(\sum_{f\in F}c_fx_f+\lambda\Delta(x)\right).
 $$
 
-The computational method and empirical study are complete. Four formal claims remain deliberately isolated for mathematical verification. The complete statement, notation, assumptions, candidate proof route, and requested output are in the [mathematical handoff](docs/MEHRAN_MATH_HANDOFF.md).
+The paper now contains complete statements and proofs for represented-path coverage (M1), feasibility (M2), resource-bounded recovery (M3), and NP-completeness/NP-hardness (M4). The [independent proof brief](docs/MEHRAN_MATH_HANDOFF.md) remains in the repository so a mathematical reviewer can audit the assumptions and return corrections without reading the full codebase.
+
+## Controlled on-chain validation
+
+The `testnet/` package contains an Euler-inspired, test-only Solidity market. Its deliberately unsafe `donateToReserves` transition can make a borrower unhealthy. The MinPause response pauses only that selector while `repay` and `addCollateral` remain callable.
+
+- 2 deterministic Hardhat tests pass locally.
+- A manual GitHub Actions workflow deploys the same fixture to **Sepolia**.
+- The workflow saves contract addresses, transaction hashes, block numbers, selectors, and assertion results as an evidence artifact.
+- This validates function-level enforcement and deployability; it is not a replay of Euler's historical mainnet state.
+
+See [testnet/README.md](testnet/README.md) for the exact setup and the two required GitHub secrets.
 
 ## Repository map
 
@@ -107,7 +121,7 @@ The computational method and empirical study are complete. Four formal claims re
 assets/
   minpause-banner.jpg          Repository banner
 docs/
-  MEHRAN_MATH_HANDOFF.md       Standalone mathematical completion brief
+  MEHRAN_MATH_HANDOFF.md       Standalone independent proof-review brief
 src/minpause/
   model.py                     Operations, paths, users, scenarios, policies
   optimizer.py                 Exact recovery-preserving pause synthesis
@@ -115,7 +129,8 @@ src/minpause/
   simulation.py                Policy counterfactual evaluation
 scripts/
   run_experiments.py           Regenerates CSVs, figures, and paper macros
-tests/                          15 unit and integration tests
+tests/                          16 Python unit and integration tests
+testnet/                        Solidity fixture, 2 tests, Sepolia deploy script
 results/                        Scenario-level and aggregate outputs
 figures/                        Publication figures in PNG and PDF
 manuscript/
@@ -148,24 +163,25 @@ The full run regenerates the scenario CSV, aggregate summary, both figures, LaTe
 
 ## Scope and claims
 
-- Research prototype and **shadow-mode evaluation** only.
-- No production, testnet, or mainnet deployment claim.
+- Research prototype intended for **shadow-mode evaluation** before automation.
+- Local Solidity validation is complete; public Sepolia deployment is claimed only when its workflow evidence artifact exists.
+- No production or historical mainnet-fork validation claim.
 - Attack paths are supplied to the optimizer; automatic path discovery is future work.
 - The policy is only as sound as the supplied operation and attack-path model.
 - The code has not been professionally audited and is not financial advice.
 
-## Mathematical completion status
+## Formal analysis status
 
 | Item | Status | Required output |
 |---|---|---|
-| M1 — Attack-path coverage | Pending mathematical review | Correct theorem and proof under an explicit trace abstraction |
-| M2 — Feasibility condition | Pending mathematical review | Proof or correction of the proposed iff condition |
-| M3 — Finite borrower recovery | Pending mathematical review | Exact resource condition, monotonicity, and reachability proof |
-| M4 — Complexity | Pending mathematical review | NP-completeness/NP-hardness reduction from weighted hitting set |
+| M1 — Attack-path coverage | Proved conditionally | Labelled transition system, hard dependency, catalogue completeness |
+| M2 — Feasibility condition | Proved | Necessary and sufficient condition $P_k\setminus R\neq\varnothing$ |
+| M3 — Finite borrower recovery | Proved conditionally | Exact resource condition and full-repayment boundary |
+| M4 — Complexity | Proved | NP-completeness reduction from Minimum Weight Hitting Set |
 
-Until these four items are completed, the repository claims empirical path coverage and reproducible simulation results—not completed formal guarantees.
+The proofs are ready for independent mathematical review. Their assumptions are part of the claims: in particular, M1 does not cover attack paths absent from the supplied catalogue, and M3 does not guarantee that a borrower owns sufficient recovery resources.
 
 ## Citation
 
-Citation metadata will be added after the mathematical section is completed and a submission venue is selected.
+Citation metadata will be added after a submission venue is selected.
 

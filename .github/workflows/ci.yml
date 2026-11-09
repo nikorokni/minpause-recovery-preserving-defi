@@ -18,3 +18,18 @@ jobs:
       - run: python scripts/run_experiments.py
       - run: test -s results/scenario_results.csv
 
+  solidity-validation:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: testnet
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: testnet/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+

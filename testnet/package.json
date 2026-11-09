@@ -1,0 +1,16 @@
+{
+  "name": "minpause-sepolia-validation",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sepolia validation harness for recovery-preserving function-level pausing",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:sepolia": "hardhat run scripts/deploy-and-validate.js --network sepolia"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^3.0.8",
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.15"
+  }
+}
